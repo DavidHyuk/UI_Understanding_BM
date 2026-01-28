@@ -68,7 +68,7 @@ python scripts/download_model.py --model_id google/gemma-3n-E4B-it --local_dir m
 
 ## Downloading & Exploring Dataset
 
-This project uses the **ScreenSpot V2** dataset (`HongxinLi/ScreenSpot_v2`).
+This project uses the **ScreenSpot V2** dataset (`HongxinLi/ScreenSpot_v2`). It also supports **SROIE** (`rajistics/sroie`) for receipt information extraction.
 
 ### 1. Download to Local Directory
 To download the dataset to `data/screenspot_v2` for easy access:
@@ -76,6 +76,12 @@ To download the dataset to `data/screenspot_v2` for easy access:
 python scripts/download_data.py
 ```
 *This will save the dataset to `data/screenspot_v2` by default.*
+
+To download the **SROIE** dataset:
+```bash
+python scripts/download_data.py --dataset_name sroie
+```
+*This will save the dataset to `data/sroie` by default.*
 
 ### 2. Visualize Data (Jupyter Notebook)
 A notebook is provided to inspect images and ground truth bounding boxes.
@@ -95,12 +101,12 @@ The inference script (`scripts/inference.py`) is optimized for **Blackwell GPUs 
 
 ### Command
 ```bash
-python scripts/inference.py --model_id models/gemma-3n --dataset_id HongxinLi/ScreenSpot_v2
+python scripts/inference.py --model_id models/gemma-3n --dataset_name screenspot
 ```
 
 ### Parameters
 - `--model_id`: Path to local model (e.g., `models/gemma-3n`) or HF ID.
-- `--dataset_id`: HF Dataset ID (default: `HongxinLi/ScreenSpot_v2`).
+- `--dataset_name`: Name of dataset to evaluate (default: `screenspot`). Choices: `screenspot`, `sroie`.
 - `--output_dir`: Directory to save results (default: `results`).
 - `--device`: `cuda` or `cpu`.
 
