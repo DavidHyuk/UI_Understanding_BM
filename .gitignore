@@ -211,3 +211,6 @@ data/
 results/
 mediapipe_source/
 executorch/
+.python-version
+pyproject.toml
+uv.lock
