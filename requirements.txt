@@ -12,3 +12,4 @@ jupyter
 ipykernel
 matplotlib
 timm
+streamlit

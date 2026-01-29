@@ -91,7 +91,7 @@ DATASET_CONFIGS = {
     "sroie": {
         "id": "rajistics/sroie",
         "split": "train",
-        "prompt_fn": lambda ex: "Extract the total amount, date, company name, and address. Output only the values in that exact order, separated by spaces.",
+        "prompt_fn": lambda ex: "Extract the total amount, date, company name, and address. Output each value on a new line.",
         "gt_fn": lambda ex: ex.get("text", "N/A"),
         "eval_fn": eval_sroie
     }
