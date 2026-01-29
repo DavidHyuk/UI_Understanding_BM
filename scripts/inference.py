@@ -8,7 +8,25 @@ from transformers import AutoProcessor, AutoModelForMultimodalLM
 from datasets import load_dataset
 
 def parse_coords(text):
-    """Parses coordinates from text (e.g. <loc0500> or 0.5)"""
+    """Parses coordinates from text (e.g. <loc0500>, 0.5, or JSON box_2d)"""
+    # Try parsing JSON first
+    try:
+        # Extract JSON part if mixed with text
+        json_match = re.search(r'\[.*\]', text, re.DOTALL)
+        if json_match:
+            data = json.loads(json_match.group(0))
+            if isinstance(data, list) and len(data) > 0:
+                # Look for box_2d in the first item
+                if "box_2d" in data[0]:
+                    coords = data[0]["box_2d"]
+                    # Check if normalized or integer
+                    if any(c > 1.0 for c in coords):
+                        # Match token-based scale (usually 1024 for Gemma/PaliGemma)
+                        return [c / 1024.0 for c in coords]
+                    return coords
+    except:
+        pass
+
     # Pattern for special location tokens <loc0000>
     loc_tokens = re.findall(r"<loc(\d{3,4})>", text)
     if loc_tokens:
@@ -119,7 +137,7 @@ def eval_sroie(pred_text, gt_text):
 DATASET_CONFIGS = {
     "screenspot": {
         "id": "HongxinLi/ScreenSpot_v2",
-        "prompt_fn": lambda ex: f"Detect the element described: {ex['instruction']}",
+        "prompt_fn": lambda ex: f"Detect the specific element described: {ex['instruction']} Output the bounding box coordinates for this element only.",
         "gt_fn": lambda ex: ex.get("bbox") or ex.get("point", "N/A"),
         "instruction_key": "instruction",
         "eval_fn": eval_screenspot
