@@ -65,23 +65,39 @@ def eval_screenspot(pred_text, gt_data):
     return {"success": 0.0}
 
 def eval_sroie(pred_text, gt_text):
-    """Evaluates Accuracy and F1 for SROIE text extraction."""
+    """Evaluates WER and F1 for SROIE text extraction."""
     def normalize(s):
         if not s: return ""
+        # Strip XML tags (e.g. <s>, <s_total>)
+        s = re.sub(r"<[^>]+>", " ", s)
         return re.sub(r"\s+", " ", s.lower().strip())
 
     p = normalize(pred_text)
     g = normalize(gt_text)
 
-    # Accuracy (Exact Match)
-    acc = 1.0 if p == g else 0.0
-
-    # F1 Score
     p_words = p.split()
     g_words = g.split()
+
+    # WER Calculation (Levenshtein on words)
+    def word_edit_distance(ref, hyp):
+        m, n = len(ref), len(hyp)
+        dp = [[0] * (n + 1) for _ in range(m + 1)]
+        for i in range(m + 1): dp[i][0] = i
+        for j in range(n + 1): dp[0][j] = j
+        for i in range(1, m + 1):
+            for j in range(1, n + 1):
+                if ref[i - 1] == hyp[j - 1]:
+                    dp[i][j] = dp[i - 1][j - 1]
+                else:
+                    dp[i][j] = min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + 1)
+        return dp[m][n]
+
+    dist = word_edit_distance(g_words, p_words)
+    wer = dist / len(g_words) if g_words else (0.0 if not p_words else 1.0)
     
+    # F1 Score
     if not g_words:
-        return {"accuracy": acc, "f1": 0.0}
+        return {"wer": wer, "f1": 0.0}
 
     common = 0
     g_words_copy = list(g_words)
@@ -98,7 +114,7 @@ def eval_sroie(pred_text, gt_text):
     else:
         f1 = 2 * (precision * recall) / (precision + recall)
 
-    return {"accuracy": acc, "f1": f1}
+    return {"wer": wer, "f1": f1}
 
 DATASET_CONFIGS = {
     "screenspot": {
@@ -111,7 +127,7 @@ DATASET_CONFIGS = {
     "sroie": {
         "id": "rajistics/sroie",
         "split": "train",
-        "prompt_fn": lambda ex: "Extract all text",
+        "prompt_fn": lambda ex: "Extract the total amount, date, company name, and address. Output only the values in that exact order, separated by spaces.",
         "gt_fn": lambda ex: ex.get("text", "N/A"),
         "instruction_key": None,
         "eval_fn": eval_sroie
@@ -201,8 +217,9 @@ def run_benchmark(model_id, dataset_name, device, output_dir):
             
             # Extract only new tokens
             input_len = inputs["input_ids"].shape[1]
-            # Don't skip special tokens to catch <loc> tags
-            generated_text = processor.decode(generated_ids[0][input_len:], skip_special_tokens=False)
+            # SROIE requires clean text (no special tokens), while ScreenSpot needs <loc> tokens
+            should_skip_special = (dataset_name == "sroie")
+            generated_text = processor.decode(generated_ids[0][input_len:], skip_special_tokens=should_skip_special)
 
         print(f"[{i+1}/{total_samples}] Prompt: {prompt_text} -> Pred: {generated_text}")
         
