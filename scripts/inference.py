@@ -154,6 +154,7 @@ def run_benchmark(model_id, dataset_name, device, output_dir):
     output_file = os.path.join(output_dir, f"benchmark_results_{dataset_name}.json")
     summary_file = os.path.join(output_dir, f"benchmark_summary_{dataset_name}.json")
 
+    total_samples = len(dataset)
     for i, example in enumerate(dataset):
         image = example["image"]
         
@@ -193,7 +194,9 @@ def run_benchmark(model_id, dataset_name, device, output_dir):
             generated_ids = model.generate(
                 **inputs,
                 max_new_tokens=256,
-                do_sample=False
+                do_sample=False,
+                top_p=None,
+                top_k=None
             )
             
             # Extract only new tokens
@@ -201,7 +204,7 @@ def run_benchmark(model_id, dataset_name, device, output_dir):
             # Don't skip special tokens to catch <loc> tags
             generated_text = processor.decode(generated_ids[0][input_len:], skip_special_tokens=False)
 
-        print(f"[{i}] Prompt: {prompt_text} -> Pred: {generated_text}")
+        print(f"[{i+1}/{total_samples}] Prompt: {prompt_text} -> Pred: {generated_text}")
         
         # Calculate Metrics
         ground_truth = config["gt_fn"](example)
