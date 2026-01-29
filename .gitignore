@@ -210,3 +210,4 @@ models/
 data/
 results/
 mediapipe_source/
+executorch/
