@@ -225,6 +225,8 @@ with col_right:
                     px, py = x * w, y * h
                     r = 5
                     draw.ellipse((px-r, py-r, px+r, py+r), fill="red", outline="red")
+            else:
+                st.warning("No coordinates found in model output to visualize.")
                     
             # Draw GT if available
             if isinstance(ground_truth, list) and len(ground_truth) == 4:
