@@ -93,8 +93,8 @@ python scripts/inference.py --model_id models/gemma-3n --dataset_name screenspot
 
 ### Features
 - **Real-time Logging**: Tracks progress with `[current/total]` sample count.
-- **Automated Evaluation**: 
-    - **SROIE**: Computes Accuracy (Exact Match) and F1 Score.
+- **Automated Evaluation**:
+    - **SROIE**: Computes **WER (Word Error Rate)** and **F1 Score**.
     - **ScreenSpot**: Computes Grounding Success Rate (Point-in-BBox).
 - **Optimized for DGX**: Uses BF16 and greedy decoding for maximum throughput.
 
@@ -112,7 +112,7 @@ python scripts/interactive_eval_with_sample.py --dataset_name sroie
 ### Features
 - **Interactive Loop**: Enter any sample index to run inference immediately.
 - **Timing**: Measures and displays the inference time for each sample.
-- **Per-Sample Metrics**: Displays ground truth and computed scores (Acc/F1/Success) for the specific sample.
+- **Per-Sample Metrics**: Displays ground truth and computed scores (**WER/F1/Success**) for the specific sample.
 - **Visual Debugging**: Saves the input image to `results/interactive/` for verification.
 
 ---
