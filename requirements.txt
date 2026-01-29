@@ -11,3 +11,5 @@ sentencepiece
 jupyter
 ipykernel
 matplotlib
+mediapipe
+safetensors
