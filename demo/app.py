@@ -213,16 +213,20 @@ with col_right:
             
             # Draw Prediction
             if len(pred_coords) >= 2:
+                # Adjust for padding (model predicts on square padded image)
+                # Assuming padding is added to bottom/right
+                max_dim = max(w, h)
+                
                 if len(pred_coords) >= 4:
                      # BBox
                     y1, x1, y2, x2 = pred_coords[:4]
-                    box = [x1 * w, y1 * h, x2 * w, y2 * h]
+                    box = [x1 * max_dim, y1 * max_dim, x2 * max_dim, y2 * max_dim]
                     draw.rectangle(box, outline="red", width=3)
                     draw.text((box[0], box[1]), "Pred", fill="red")
                 else:
                     # Point
                     y, x = pred_coords[0], pred_coords[1]
-                    px, py = x * w, y * h
+                    px, py = x * max_dim, y * max_dim
                     r = 5
                     draw.ellipse((px-r, py-r, px+r, py+r), fill="red", outline="red")
             else:
