@@ -100,6 +100,23 @@ python scripts/inference.py --model_id models/gemma-3n --dataset_name screenspot
 
 ---
 
+## Interactive Web Demo
+
+A Streamlit-based web application is provided for a more user-friendly interaction with the model and datasets.
+
+### Command
+```bash
+bash run_demo.sh
+```
+
+### Features
+- **Visual Interface**: Easily switch between datasets and samples.
+- **Inference Comparison**: View side-by-side comparison of generated output vs. ground truth.
+- **Diff Highlighting**: Automatically highlights differences in text extraction tasks.
+- **Metric Dashboard**: Real-time display of performance metrics for the current sample.
+
+---
+
 ## Debugging & Interaction Testing
 
 To interactively inspect samples, view the exact prompt sent to the model, and measure inference time, use `scripts/interactive_eval_with_sample.py`.

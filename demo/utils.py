@@ -234,6 +234,7 @@ DATASET_CONFIGS = {
         "split": "test",
         "prompt_fn": lambda ex: f"Detect the specific element described: {ex['instruction']} Output the bounding box coordinates for this element only.",
         "gt_fn": lambda ex: ex.get("bbox") or ex.get("point", "N/A"),
+        "instruction_key": "instruction",
         "eval_fn": eval_screenspot
     },
     "sroie": {
@@ -241,6 +242,7 @@ DATASET_CONFIGS = {
         "split": "train",
         "prompt_fn": lambda ex: "Extract the total amount, date, company name, and address. Output only the values on separate lines. Do not include labels or field names.",
         "gt_fn": lambda ex: ex.get("text", "N/A"),
+        "instruction_key": None,
         "eval_fn": eval_sroie
     }
 }
