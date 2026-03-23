@@ -58,11 +58,23 @@ st.markdown("""
 st.sidebar.title("Configuration")
 
 model_id = st.sidebar.selectbox("Model ID", ["models/gemma-3n", "models/Qwen2-VL-7B-Instruct"], index=0)
-device_option = st.sidebar.selectbox("Device", ["cuda", "cpu"], index=0 if torch.cuda.is_available() else 1)
+# Determine available devices
+available_devices = ["cpu"]
+if torch.cuda.is_available():
+    available_devices.insert(0, "cuda")
+if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    available_devices.insert(0, "mps")
+try:
+    import mlx.core as mx
+    available_devices.insert(0, "mlx")
+except ImportError:
+    pass
+
+device_option = st.sidebar.selectbox("Device", available_devices, index=0)
 dataset_name = st.sidebar.selectbox("Dataset", list(DATASET_CONFIGS.keys()))
 
 st.sidebar.markdown("---")
-st.sidebar.info(f"Detected Device: {'cuda' if torch.cuda.is_available() else 'cpu'}")
+st.sidebar.info(f"Detected Devices: {', '.join(available_devices)}")
 
 # --- Resource Loading (Cached) ---
 @st.cache_resource
