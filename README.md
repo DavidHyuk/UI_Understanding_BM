@@ -1,6 +1,8 @@
 # UI Understanding Benchmark Framework
 
 
+> **Note:** A minimum of 18GB VRAM is recommended to run the multimodal models in this framework.
+
 It is optimized for high-performance GPU environments (including **NVIDIA Blackwell GB10**) and supports **aarch64** (ARM64) architectures like **DGX Spark**.
 
 ## Table of Contents
