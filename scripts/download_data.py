@@ -10,17 +10,29 @@ DATASETS = {
     "sroie": {
         "id": "rajistics/sroie",
         "default_dir": "data/sroie"
+    },
+    "screenqa": {
+        "id": "rootsautomation/RICO-ScreenQA",
+        "default_dir": "data/screenqa"
+    },
+    "widget_captioning": {
+        "id": "rootsautomation/RICO-WidgetCaptioning",
+        "default_dir": "data/widget_captioning"
     }
 }
 
 def download_dataset(dataset_id, local_dir=None):
     print(f"Downloading dataset {dataset_id}...")
-    # trust_remote_code=True is often needed for datasets with custom loading scripts
+    # Try without trust_remote_code first, then with it if it fails
     try:
-        dataset = load_dataset(dataset_id, trust_remote_code=True)
+        dataset = load_dataset(dataset_id)
     except Exception as e:
-        print(f"Error loading dataset: {e}")
-        return
+        print(f"Retrying with trust_remote_code=True due to: {e}")
+        try:
+            dataset = load_dataset(dataset_id, trust_remote_code=True)
+        except Exception as e2:
+            print(f"Error loading dataset: {e2}")
+            return
 
     if local_dir:
         dataset.save_to_disk(local_dir)
