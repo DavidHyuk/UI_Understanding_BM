@@ -6,10 +6,10 @@ import time
 import json
 from PIL import Image
 
-# Add the project root to sys.path to allow importing demo.utils
+# Add the project root to sys.path to allow importing scripts.src.common.utils
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from demo.utils import DATASET_CONFIGS, load_model_and_processor, get_dataset
+from scripts.src.common.utils import DATASET_CONFIGS, load_model_and_processor, get_dataset, calculate_corpus_metrics
 
 def interactive_session(model_id, dataset_name, device, output_dir):
     if dataset_name not in DATASET_CONFIGS:
@@ -57,43 +57,36 @@ def interactive_session(model_id, dataset_name, device, output_dir):
         image.save(image_path)
         print(f"[1] Input Image saved to: {image_path}")
 
-        # 2. Prepare Chat Template
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": prompt_text}
-                ]
-            }
-        ]
+        # 2. Inference
+        print(f"\n[2] Prompt:\n{'-'*20}\n{prompt_text}\n{'-'*20}")
         
-        prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        print(f"\n[2] Prompt:\n{'-'*20}\n{prompt}\n{'-'*20}")
-
-        # 3. Inference
-        inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
-        inputs = {k: v.to(torch.bfloat16) if v.dtype == torch.float32 else v for k, v in inputs.items()}
-
         start_time = time.time()
-        with torch.no_grad():
-            generated_ids = model.generate(
-                **inputs, 
+        try:
+            should_skip_special = (dataset_name == "sroie")
+            generated_text = model.generate_content(
+                prompt_text=prompt_text,
+                image=image,
                 max_new_tokens=512,
-                do_sample=False,
-                top_p=None,
-                top_k=None
+                skip_special_tokens=should_skip_special
             )
+        except Exception as e:
+            print(f"Inference error: {e}")
+            generated_text = ""
+            
         end_time = time.time()
         elapsed_time = end_time - start_time
-            
-        input_len = inputs["input_ids"].shape[1]
-        # SROIE requires clean text (no special tokens), while ScreenSpot needs <loc> tokens
-        should_skip_special = (dataset_name == "sroie")
-        generated_text = processor.decode(generated_ids[0][input_len:], skip_special_tokens=should_skip_special)
 
         # 4. Evaluation
         metrics = config["eval_fn"](generated_text, ground_truth)
+        
+        # Calculate additional corpus-level metrics if available (e.g. CIDEr, METEOR for captioning)
+        if dataset_name == "widget_captioning":
+            try:
+                corpus_res = [{"prediction": generated_text, "ground_truth": ground_truth}]
+                extra_metrics = calculate_corpus_metrics(corpus_res, dataset_name)
+                metrics.update(extra_metrics)
+            except Exception as e:
+                print(f"Warning: Failed to calculate extra metrics: {e}")
 
         print(f"\n[3] Output (Inference time: {elapsed_time:.2f}s):\n{'-'*20}\n{generated_text}\n{'-'*20}")
         print(f"\n[4] Evaluation Results:\n{'-'*20}")

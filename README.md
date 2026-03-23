@@ -1,6 +1,5 @@
-# UI Understanding Benchmark: ScreenSpot V2 & SROIE with Gemma 3n
+# UI Understanding Benchmark Framework
 
-This project provides a comprehensive benchmarking framework for evaluating the **Gemma 3n** (and other Gemma 3 variants) open-source model on UI understanding, grounding, and OCR tasks.
 
 It is optimized for high-performance GPU environments (including **NVIDIA Blackwell GB10**) and supports **aarch64** (ARM64) architectures like **DGX Spark**.
 
@@ -16,11 +15,21 @@ It is optimized for high-performance GPU environments (including **NVIDIA Blackw
 ---
 
 ## Project Overview
-This benchmark evaluates a model's ability to identify UI elements (ScreenSpot V2) and extract information from documents/receipts (SROIE).
-- **Gemma 3n (VLM)**: Used for multimodal understanding and grounding.
-- **BF16 (BFloat16)**: Supported for stability and high performance on DGX Spark.
-- **Official Chat Templates**: Applied for correct model prompting.
-- **Extensible Framework**: Supports multiple datasets and custom metrics.
+This benchmark evaluates LVLMs across multiple specialized datasets for UI understanding:
+- **Detection & Grounding**: Identifying UI elements based on instructions.
+- **Information Extraction**: Parsing structured data from screens or documents.
+- **Visual Question Answering**: Answering complex queries about screen content.
+- **Widget Captioning**: Describing the functional role of UI elements.
+
+### Supported Models
+- **Gemma 3n / 4B / 12B / 27B**: Integrated via Hugging Face.
+- **Qwen2-VL-7B-Instruct**: Integrated for comparative evaluation.
+
+### Key Features
+- **BF16 (BFloat16)**: Stability and high performance on NVIDIA Blackwell (GB10) and DGX Spark.
+- **DDP Support**: Multi-GPU dataset sharding for high-throughput evaluation.
+- **Interactive Debugging**: Per-sample inspection with real-time metrics and prompt visualization.
+- **Refined Evaluation**: Enhanced metrics like Substring ANLS and Functional Match for more accurate performance measurement.
 
 ## Environment Setup
 
@@ -39,7 +48,7 @@ pip install -r requirements.txt
 
 ## Downloading Models
 
-Use the provided script to download Gemma 3 models to a local directory.
+Use the provided script to download models to a local directory.
 
 ### Authentication
 If the model is gated, export your token:
@@ -49,26 +58,33 @@ export HF_TOKEN=your_token_here
 
 ### Download Command
 ```bash
+# Download Gemma 3n
 python scripts/download_model.py --model_id google/gemma-3n-E4B-it --local_dir models/gemma-3n
+
+# Download Qwen2-VL-7B-Instruct
+python scripts/download_model.py --model_id Qwen/Qwen2-VL-7B-Instruct --local_dir models/Qwen2-VL-7B-Instruct
 ```
 
 ---
 
 ## Downloading & Exploring Datasets
 
-The framework currently supports **ScreenSpot V2** and **SROIE**.
+The framework supports several standard benchmarks for UI understanding.
 
 ### 1. Download to Local Directory
 Use `scripts/download_data.py` with the `--dataset_name` flag.
 
-**Download ScreenSpot V2 (default):**
-```bash
-python scripts/download_data.py --dataset_name screenspot
-```
+| Dataset | Description | Key Metric |
+| :--- | :--- | :--- |
+| `screenspot` | UI Element Detection | Success Rate |
+| `sroie` | Document OCR/Extraction | F1, WER |
+| `screenqa` | Screen-based VQA | ANLS |
+| `widget_captioning` | UI Element Description | CIDEr, Functional Match |
 
-**Download SROIE:**
+**Example Command:**
 ```bash
-python scripts/download_data.py --dataset_name sroie
+# Download ScreenQA
+python scripts/download_data.py --dataset_name screenqa
 ```
 
 ### 2. Visualize Data (Jupyter Notebook)
@@ -84,25 +100,45 @@ The `scripts/inference.py` script runs the full benchmark on a selected dataset.
 
 ### Command
 ```bash
-# Run SROIE evaluation
+# Run SROIE evaluation (Full)
 python scripts/inference.py --model_id models/gemma-3n --dataset_name sroie
 
-# Run ScreenSpot evaluation
-python scripts/inference.py --model_id models/gemma-3n --dataset_name screenspot
+# Run ScreenQA (Sampled - first 1000 items)
+```
+
+### Multi-GPU Inference (DDP)
+For high-throughput benchmarking on multi-GPU systems, use the DDP-enabled script. This automatically shards the dataset across all available GPUs.
+
+```bash
+bash scripts/run_inference_ddp.sh
+
+# Run DDP inference with specific model and dataset (Full "test" split for screenspot)
+bash scripts/run_inference_ddp.sh models/gemma-3n screenspot
+
+# Run with specific number of samples (e.g., first 100 samples)
+bash scripts/run_inference_ddp.sh models/gemma-3n screenspot 100
+```
+
+> **Note**: The script automatically loads the specific split defined for each dataset in `scripts/src/common/utils.py` (e.g., `test` for ScreenSpot/ScreenQA, `train` for SROIE). If `NUM_SAMPLES` is omitted, it evaluates the entire configured split.
+
+Alternatively, use `torchrun` directly:
+```bash
 ```
 
 ### Features
 - **Real-time Logging**: Tracks progress with `[current/total]` sample count.
 - **Automated Evaluation**:
-    - **SROIE**: Computes **WER (Word Error Rate)** and **F1 Score**.
-    - **ScreenSpot**: Computes Grounding Success Rate (Point-in-BBox).
+    - **SROIE**: WER (Word Error Rate), F1 Score.
+    - **ScreenSpot**: Grounding Success Rate (Point-in-BBox).
+    - **ScreenQA**: ANLS (with substring matching support), F1 Score.
+    - **Widget Captioning**: CIDEr, METEOR, ROUGE-L, Functional Match.
 - **Optimized for DGX**: Uses BF16 and greedy decoding for maximum throughput.
 
 ---
 
 ## Interactive Web Demo
 
-A Streamlit-based web application is provided for a more user-friendly interaction with the model and datasets.
+A Streamlit-based web application is provided for a more user-friendly interaction with the model and datasets. It is optimized for multi-GPU systems.
 
 ### Command
 ```bash
@@ -134,11 +170,17 @@ python scripts/interactive_eval_with_sample.py --dataset_name sroie
 
 ---
 
+## Detailed Metric Definitions
+For more information on how each dataset is evaluated and the custom logic applied (like Substring ANLS or Functional Match), see:
+👉 [**Assets/Eval_Metrics.md**](assets/eval_metrics.md)
+
+---
+
 ## Results & Output
 
-Results are saved in the `results/` directory:
+Results are saved in the `results/` directory, organized by model and timestamp:
 - **`benchmark_results_{dataset}.json`**: Detailed predictions and metrics for every sample.
-- **`benchmark_summary_{dataset}.json`**: Aggregated average scores (Accuracy, F1, etc.).
+- **`benchmark_summary_{dataset}.json`**: Aggregated average scores (ANLS, Success Rate, CIDEr, etc.).
 
 ## Contributing
 Contributions are welcome! Please open an issue or submit a pull request for improvements.

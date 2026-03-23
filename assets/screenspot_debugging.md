@@ -39,3 +39,18 @@ After updating the prompt, the model began producing JSON-structured output cont
 - **Success:** The system now correctly extracts coordinates from the model's structured response.
 - **Metrics:** Metrics are now correctly calculated based on the parsed coordinates.
 - **Visualization:** The web app now renders the prediction (Red box) alongside the Ground Truth (Green box), enabling proper visual debugging.
+
+### 3. Coordinate Normalization Fix
+
+## Issue
+Even with correct JSON parsing, IOU scores were 0 for many samples.
+- **Symptoms:** Bounding boxes looked correct visually but scores were 0.
+- **Cause:** The model outputs absolute pixel coordinates (e.g., `[233, 155...]`) relative to the image size. The evaluation script default normalization (dividing by 1024) was incorrect for images that were not 1024x1024 (e.g. 540x960). Ground Truth is normalized (0-1).
+
+## Fix
+- **Evaluation Logic:** Updated `eval_screenspot` to accept `image_size`.
+- **Normalization:** If the model outputs pixel coordinates (> 1.0), they are now normalized using the actual image dimensions (`c / height` or `c / width`) instead of the fixed 1024 scale.
+
+## Verification
+- **Result:** IOU scores improved from 0.0 to ~1.0 for valid predictions. The coordinates now correctly match the normalized Ground Truth.
+- **Data Inspection:** Verified via `scripts/debug/check_screenspot_data.py` that dataset image sizes vary (e.g., 960x540, 1920x1080), confirming the necessity of dynamic normalization.

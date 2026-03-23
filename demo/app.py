@@ -2,11 +2,14 @@ import streamlit as st
 import torch
 import time
 import os
+import sys
 from PIL import Image, ImageDraw
 import numpy as np
 
 # Import from utils
-from utils import load_model_and_processor, get_dataset, DATASET_CONFIGS, parse_coords, format_sroie_display, parse_sroie_tags, postprocess_sroie_raw, highlight_text_diff, highlight_gt_diff
+# Add project root to path to allow importing scripts.src.common.utils
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from scripts.src.common.utils import load_model_and_processor, get_dataset, DATASET_CONFIGS, parse_coords, format_sroie_display, parse_sroie_tags, postprocess_sroie_raw, highlight_text_diff, highlight_gt_diff
 
 # Page Configuration
 st.set_page_config(
@@ -54,7 +57,7 @@ st.markdown("""
 # --- Sidebar ---
 st.sidebar.title("Configuration")
 
-model_id = st.sidebar.text_input("Model ID", "models/gemma-3n")
+model_id = st.sidebar.selectbox("Model ID", ["models/gemma-3n", "models/Qwen2-VL-7B-Instruct"], index=0)
 device_option = st.sidebar.selectbox("Device", ["cuda", "cpu"], index=0 if torch.cuda.is_available() else 1)
 dataset_name = st.sidebar.selectbox("Dataset", list(DATASET_CONFIGS.keys()))
 
@@ -99,6 +102,11 @@ with col2:
 example = dataset[sample_idx]
 image = example["image"]
 dataset_config = DATASET_CONFIGS[dataset_name]
+
+# Apply transformation if defined (e.g. drawing bbox for widget captioning)
+if dataset_config.get("transform_fn"):
+    image = dataset_config["transform_fn"](example)
+
 prompt_text = dataset_config["prompt_fn"](example)
 ground_truth = dataset_config["gt_fn"](example)
 
@@ -129,26 +137,23 @@ with col_right:
             }
         ]
         
-        prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        
         # Inference
-        inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
-        inputs = {k: v.to(torch.bfloat16) if v.dtype == torch.float32 else v for k, v in inputs.items()}
-        
-        with torch.no_grad():
-            generated_ids = model.generate(
-                **inputs, 
+        try:
+            should_skip_special = (dataset_name == "sroie")
+            generated_text = model.generate_content(
+                prompt_text=prompt_text,
+                image=image,
                 max_new_tokens=512,
-                do_sample=False
+                skip_special_tokens=should_skip_special
             )
-            
-        elapsed = time.time() - start_time
-        input_len = inputs["input_ids"].shape[1]
-        should_skip_special = (dataset_name == "sroie")
-        generated_text = processor.decode(generated_ids[0][input_len:], skip_special_tokens=should_skip_special)
+            elapsed = time.time() - start_time
+        except Exception as e:
+            st.error(f"Inference failed: {e}")
+            generated_text = ""
+            elapsed = time.time() - start_time
         
         # Evaluation
-        metrics = dataset_config["eval_fn"](generated_text, ground_truth)
+        metrics = dataset_config["eval_fn"](generated_text, ground_truth, image_size=image.size)
         
         # Display Results
         st.markdown(f"**Inference Time:** {elapsed:.2f}s")
@@ -187,6 +192,9 @@ with col_right:
                         st.markdown(f"**{tag}**: {gt_val}", unsafe_allow_html=True)
             else:
                 st.write(ground_truth)
+        else:
+            st.markdown("### Ground Truth")
+            st.write(ground_truth)
         
         st.markdown("### Metrics")
         
@@ -204,29 +212,68 @@ with col_right:
         # --- Visualization (If applicable) ---
         if dataset_name == "screenspot":
             st.markdown("### Visualization")
-            pred_coords = parse_coords(generated_text)
+            pred_coords = parse_coords(generated_text, unscaled=True)
             
             # Create a copy to draw on
             vis_image = image.copy()
             draw = ImageDraw.Draw(vis_image)
             w, h = vis_image.size
             
-            # Draw Prediction
-            if len(pred_coords) >= 2:
-                # Adjust for padding (model predicts on square padded image)
-                # Assuming padding is added to bottom/right
-                max_dim = max(w, h)
+            # Normalize and scale to image size
+            # If coordinates are absolute pixels (>1), normalize by image dimensions
+            # If coordinates are already 0-1, use them directly
+            # We assume [y1, x1, y2, x2] (YXYX) format
+            
+            final_coords = []
+            if any(c > 1.0 for c in pred_coords):
+                # Pixel coordinates
+                for i, c in enumerate(pred_coords):
+                    # No need to normalize then multiply again. Just use pixels directly?
+                    # But we need to ensure they match the current image size.
+                    # If model output matches image size, we are good.
+                    final_coords.append(c)
+            else:
+                # Normalized coordinates (0-1)
+                # Scale to image dimensions. Note: if it's [y1, x1, y2, x2] or [xmin, ymin, xmax, ymax]
+                # Qwen outputs [xmin, ymin, xmax, ymax], Gemma outputs [y1, x1, y2, x2] based on parse_coords.
+                # Actually, parse_coords assumes it's just raw numbers. 
+                # Let's check what model_id is used.
+                is_qwen = "qwen" in model_id.lower()
                 
-                if len(pred_coords) >= 4:
+                if is_qwen:
+                    # Qwen usually outputs [xmin, ymin, xmax, ymax]
+                    for i, c in enumerate(pred_coords):
+                        if i % 2 == 0: # x
+                            final_coords.append(c * w)
+                        else: # y
+                            final_coords.append(c * h)
+                else:
+                    for i, c in enumerate(pred_coords):
+                        if i % 2 == 0: # y
+                            final_coords.append(c * h)
+                        else: # x
+                            final_coords.append(c * w)
+            
+            # Draw Prediction
+            if len(final_coords) >= 2:
+                if len(final_coords) >= 4:
                      # BBox
-                    y1, x1, y2, x2 = pred_coords[:4]
-                    box = [x1 * max_dim, y1 * max_dim, x2 * max_dim, y2 * max_dim]
+                    if is_qwen:
+                        x1, y1, x2, y2 = final_coords[:4]
+                    else:
+                        y1, x1, y2, x2 = final_coords[:4]
+                    
+                    # Ensure coords are within image bounds
+                    box = [x1, y1, x2, y2]
                     draw.rectangle(box, outline="red", width=3)
                     draw.text((box[0], box[1]), "Pred", fill="red")
                 else:
                     # Point
-                    y, x = pred_coords[0], pred_coords[1]
-                    px, py = x * max_dim, y * max_dim
+                    if is_qwen:
+                        x, y = final_coords[0], final_coords[1]
+                    else:
+                        y, x = final_coords[0], final_coords[1]
+                    px, py = x, y
                     r = 5
                     draw.ellipse((px-r, py-r, px+r, py+r), fill="red", outline="red")
             else:
@@ -262,4 +309,5 @@ with col_right:
             
     else:
         st.info("Click 'Run Inference' to see results.")
+
 
