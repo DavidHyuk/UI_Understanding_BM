@@ -47,11 +47,17 @@ class HuggingFaceWrapper(BaseModelWrapper):
     """Wrapper for standard HuggingFace models (e.g., Gemma 3n)."""
 
     def load(self):
+        is_mlx = getattr(self, "use_mlx", False)
+        
+        dtype = torch.bfloat16
+        if str(self.device) == "mps":
+            dtype = torch.float16
+            
         print(f"Loading HuggingFace model: {self.model_path} on {self.device}...")
         self.processor = AutoProcessor.from_pretrained(self.model_path, trust_remote_code=True)
         self.model = AutoModelForMultimodalLM.from_pretrained(
             self.model_path,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=dtype,
             device_map=self.device,
             trust_remote_code=True
         )
@@ -75,7 +81,9 @@ class HuggingFaceWrapper(BaseModelWrapper):
         prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True)
 
         inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.model.device)
-        inputs = {k: v.to(torch.bfloat16) if v.dtype == torch.float32 else v for k, v in inputs.items()}
+        
+        target_dtype = torch.float16 if str(self.device) == "mps" else torch.bfloat16
+        inputs = {k: v.to(target_dtype) if v.dtype == torch.float32 else v for k, v in inputs.items()}
         
         with torch.no_grad():
             generated_ids = self.model.generate(
@@ -94,6 +102,71 @@ class HuggingFaceWrapper(BaseModelWrapper):
         skip_special_tokens = kwargs.get('skip_special_tokens', True)
         
         generated_text = self.processor.decode(generated_ids[0][input_len:], skip_special_tokens=skip_special_tokens)
+        generated_text = generated_text.replace("<end_of_turn>", "").replace("<eos>", "").strip()
+        return generated_text
+
+class MLXModelWrapper(BaseModelWrapper):
+    """Wrapper for Apple MLX framework models (e.g., mlx-vlm)."""
+    
+    def load(self):
+        try:
+            import mlx.core as mx
+            from mlx_vlm import load
+            from mlx_vlm.prompt_utils import apply_chat_template
+            from mlx_vlm.utils import generate
+        except ImportError:
+            raise ImportError("MLX backend requested, but mlx or mlx_vlm is not installed. Run `pip install mlx mlx-vlm`.")
+
+        print(f"Loading MLX model: {self.model_path}...")
+        self.model, self.processor = load(self.model_path)
+        
+        # Save a reference to the needed functions
+        self.apply_chat_template = apply_chat_template
+        self.mlx_generate = generate
+
+    def generate_content(self, prompt_text, image, **kwargs):
+        max_new_tokens = kwargs.get('max_new_tokens', 256)
+        
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": prompt_text}
+                ]
+            }
+        ]
+        
+        # Apply MLX chat template
+        prompt = self.apply_chat_template(self.processor, self.model.config, messages)
+        
+        # MLX generate implementation
+        from mlx_vlm.utils import generate
+        # MLX takes image paths or URLs natively, but since we receive a PIL image we might need to save it or handle it.
+        # mlx_vlm often can handle PIL images directly or lists of PIL images depending on the version.
+        try:
+            generated_text = generate(
+                self.model,
+                self.processor,
+                prompt,
+                [image],
+                max_tokens=max_new_tokens,
+                verbose=False
+            )
+        except Exception as e:
+            # Fallback for older mlx-vlm if they need paths
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".png") as temp_img:
+                image.save(temp_img.name)
+                generated_text = generate(
+                    self.model,
+                    self.processor,
+                    prompt,
+                    [temp_img.name],
+                    max_tokens=max_new_tokens,
+                    verbose=False
+                )
+        
         generated_text = generated_text.replace("<end_of_turn>", "").replace("<eos>", "").strip()
         return generated_text
 
@@ -118,3 +191,4 @@ class ModelFactory:
                     print(f"Assigning Gemma 3n to {target_device}")
 
         return HuggingFaceWrapper(model_id, target_device)
+
