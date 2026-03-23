@@ -17,5 +17,8 @@ typer
 evaluate
 rouge-score
 nltk
-pycocoevalcapqwen-vl-utils
+pycocoevalcap
 qwen-vl-utils
+mlx; sys_platform == 'darwin' and platform_machine == 'arm64'
+mlx-vlm; sys_platform == 'darwin' and platform_machine == 'arm64'
+watchdog
